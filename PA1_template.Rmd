@@ -1,25 +1,124 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "PA1_template"
+author: "Ingrieta"
+date: "21/4/2021"
+output: html_document
 ---
-
-
-## Loading and preprocessing the data
+## 1. Loading and preprocessing the data
+```{r}
+if (!file.exists("activity.csv") ) #si no existe el archivo cargalo y descomprimirlo
+    {
+     url <- 'http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip'  
+     download.file(url,destfile='repdata%2Fdata%2Factivity.zip',mode='wb')  
+     unzip('repdata%2Fdata%2Factivity.zip')
+    }
+df_activity <-read.csv("activity/activity.csv")
+```
 
 
 
 ## What is mean total number of steps taken per day?
+### 1. Make a histogram of the total number of steps taken each day
+```{r}
+library(dplyr)
+library(lubridate)
+Sys.setlocale("LC_TIME") #porque la fecha esta en local Mexico
+df_activity$date <- as.Date(df_activity$date, format = "%Y-%m-%d")
+
+df_steps_per_day <- df_activity%>%select(date,steps)%>%group_by(date)%>%summarise('steps per day'=sum(steps),'media' = mean(steps))
+
+hist(df_steps_per_day$`steps per day`,main = "Total number of steps taken per day", xlab= "Steps per day", col = "lightblue", ylim = c(0,30))
+dev.copy(png,"plot1.png", width=480, height=480)
+dev.off()
+    
+```
+
+2. Calculate and report the mean and median total number of steps taken per day
+```{r}
+steps_mean<-mean(df_steps_per_day$`steps per day`,na.rm = T)
+steps_median <-median(df_steps_per_day$`steps per day`,na.rm = T)
+```
+
+The mean is `r steps_mean` an the median is `r steps_median`.
+ 
+
+##  What is the average daily activity pattern?
+1. Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+```{r}
+df_steps_interval <- aggregate(steps ~ interval, df_activity, mean)
+
+library(ggplot2)
+g1 = ggplot(data = df_steps_interval, aes(x= interval, y = steps))+geom_line(col= "lightblue") + labs(title="Avarage steps per interval")
+print(g1)
+ggsave("Plot2.png", width = 20, height = 20, units = "cm")
+```
 
 
+2.Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
 
-## What is the average daily activity pattern?
+```{r}
+max_steps_interval <- df_steps_interval[which.max(df_steps_interval$steps),1]
+```
+`r max_steps_interval` interval has the maximum number of steps.
 
 
 
 ## Imputing missing values
 
+1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+```{r}
+v_nas <- is.na(df_activity) #vector T y F
+total_nas <- sum(v_nas)  #los T los suma como 1
+```
+Total NA´s equal to `r total_nas`.
 
+
+2. Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+
+```{r}
+na_index <-  which(is.na(df_activity$steps)) # tengo los indices que tienen NAs en steps
+#sustituir NAs con la media del intervalo
+df_missing <- left_join(df_activity[na_index, ],df_steps_interval, by = "interval")
+df_complete <-df_activity
+
+```
+
+
+3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+```{r}
+df_complete[na_index,"steps"]<- df_missing[,"steps.y"]
+```
+
+4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+```{r}
+df_steps_per_day_nas <-aggregate(steps ~ date, df_complete, sum)
+hist(df_steps_per_day_nas$steps, main = "Total number of steps", xlab= "Steps", col = "red", ylim = c(0,40))
+hist(df_steps_per_day$`steps per day`,main = "Total number of steps with NAs", xlab= "Steps", col = "lightblue", ylim = c(0,40), add=T)
+legend("topright", c("Missing values"), col=c("red"), lwd=10)
+dev.copy(png,"plot3.png", width=480, height=480)
+dev.off()
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+1.Create a new factor variable in the dataset with two levels -- "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+```{r}
+Sys.setlocale("LC_TIME", "English")
+weekday<- weekdays(df_activity$date)
+df_activity<-cbind(df_activity, weekday)
+weekend <- c("Saturday", "Sunday")
+df_activity$day[(df_activity$weekday %in% weekend)]<- ("weekend")
+df_activity$day[(!df_activity$weekday %in% weekend)]<- ("weekday")
+df_activity$day<-as.factor(df_activity$day)
+df_activity_weekday<- aggregate(steps~interval+day, df_activity,mean, na.rm =TRUE)
+```
+
+2. Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). The plot should look something like the following, which was created using simulated data:
+
+```{r}
+library(lattice)
+xyplot(steps ~  interval | day, data = df_activity_weekday, layout = c(1,2), type ="l", ylab="Number of Steps", main=list("Avarage Steps per day type and interval", cex=1.6))
+dev.copy(png,"plot4.png", width=480, height=480)
+dev.off()
+```
